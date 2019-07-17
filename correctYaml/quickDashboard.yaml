@@ -1,0 +1,93 @@
+---
+Resources:
+  ExampleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: CFTestAlarm
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      # if name value is specified CF pulls in default metric metadata
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Period: 300
+      Threshold: 20
+      Unit: Seconds
+      Statistic: Average
+
+  SpendingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      Namespace: AWS/Billing
+      MetricName: EstimatedCharges
+      Dimensions:
+      - Name: Currency
+        Value: USD
+      Statistic: Maximum
+      Period: '21600'
+      EvaluationPeriods: '1'
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 100
+
+  ProjectDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    DependsOn: 
+      - ExampleAlarm
+      - SpendingAlarm
+    Properties: 
+      DashboardName: ProjectDashboardTest
+      DashboardBody: !Sub '{
+                              "widgets": [
+                                  {
+                                      "type": "metric",
+                                      "x": 0,
+                                      "y": 0,
+                                      "width": 6,
+                                      "height": 6,
+                                      "properties": {
+                                          "view": "timeSeries",
+                                          "stacked": false,
+                                          "metrics": [
+                                              [ "AWS/EC2", "CPUUtilization", "InstanceId", "${!Import ASTempEC2ID}" ]
+                                          ],
+                                          "region": "us-east-1"
+                                      }
+                                  },
+                                  {
+                                      "type": "metric",
+                                      "x": 6,
+                                      "y": 0,
+                                      "width": 6,
+                                      "height": 6,
+                                      "properties": {
+                                          "view": "timeSeries",
+                                          "stacked": false,
+                                          "metrics": [
+                                              [ "CWAgent", "mem_used_percent", "InstanceId", "${!Import ASTempEC2ID}" ]
+                                          ],
+                                          "region": "us-east-1"
+                                      }
+                                  },
+                                  {
+                                      "type": "metric",
+                                      "x": 12,
+                                      "y": 0,
+                                      "width": 6,
+                                      "height": 6,
+                                      "properties": {
+                                          "view": "timeSeries",
+                                          "stacked": false,
+                                          "metrics": [
+                                              [ "System/Linux", "MemoryAvailable", "InstanceId", "${!Import ASTempEC2ID}" ]
+                                          ],
+                                          "region": "us-east-1"
+                                      }
+                                  }
+                              ]
+                          }'
+
+Outputs:
+  ProjectDashboardOutput:
+    Description:  Dashboard output value.
+    Value: !Ref ProjectDashboard
+    Export:
+      Name: ProjectDashboardID

@@ -1,0 +1,139 @@
+---
+Parameters:
+  TempEC2KeyPair:
+    Default: astempkeypair
+    Description: Desired keypair for EC2 instance.
+    Type: AWS::EC2::KeyPair::KeyName
+    
+  LatestAmiId:
+    Description: Desired amiID for latest amazon image.
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+
+
+Resources:
+  # creating base permissions/roles (role, ip, policy)
+  ASTempRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - 
+            Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+
+  ASTempInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: DashboardProfile
+      Roles:
+        - !Ref ASTempRole
+
+  # confirm that the actions are relevant
+  ASTempDashboardPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ASTempPolicy
+      PolicyDocument:
+        Statement:
+          - 
+            Effect: Allow
+            Action: 
+              - 's3:*'
+              - 'cloudwatch:*'
+              - 'logs:*'
+              - 'sns:*'
+              - 'iam:GetPolicy'
+              - 'iam:GetPolicyVersion'
+              - 'iam:GetRole'
+            Resource: '*'
+      Roles:
+        - !Ref ASTempRole
+
+  # creating network resources (vpc, subnet, ig, igconnection, ssg, ec2, routetable, routableassociation, s3)
+  ASTempVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 10.0.0.0/16
+  
+  ASTempSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      VpcId: !Ref ASTempVPC
+      MapPublicIpOnLaunch: True
+
+  ASTempRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref ASTempVPC
+
+  ASTempRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref ASTempRouteTable
+      SubnetId: !Ref ASTempSubnet
+
+  ASTempInternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  ASTempInternetGatewayConnnection:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref ASTempInternetGateway
+      VpcId: !Ref ASTempVPC
+    
+  ASTempS3:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: astempbucketfordashboard071619
+
+  # setting network traffic to open
+  ASTempSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP, SSH
+      VpcId: !Ref ASTempVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  ASTempEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t2.micro
+      KeyName: !Ref TempEC2KeyPair
+      Monitoring: True
+      IamInstanceProfile: !Ref ASTempInstanceProfile
+      NetworkInterfaces: 
+        - DeviceIndex: 0
+          SubnetId: !Ref ASTempSubnet
+          GroupSet:
+            - !Ref ASTempSSG
+
+            
+Outputs:
+  ProjectDashboardEC2:
+    Description:  EC2 output value.
+    Value: !Ref ASTempEC2
+    Export:
+      Name: ASTempEC2ID
